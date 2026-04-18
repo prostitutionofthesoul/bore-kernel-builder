@@ -78,7 +78,7 @@ The script will:
    - Storage type (NVMe, SATA SSD, HDD)
 4. **Download kernel source** and CachyOS patches
 5. **Configure kernel** with ~200 optimizations
-6. **Compile** (20-90 minutes depending on CPU)
+6. **Compile** (40-200 minutes depending on CPU)
 
 ### Install Kernel
 
