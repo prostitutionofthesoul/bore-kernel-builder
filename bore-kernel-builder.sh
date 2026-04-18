@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Colors
+# ANSI color codes for terminal output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -10,7 +10,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Variables
+# global vars
 KERNEL_MAJOR=""
 KERNEL_MINOR=""
 KERNEL_PATCH=""
@@ -25,20 +25,21 @@ INIT_SYSTEM=""
 BUILD_DIR="$(pwd)/build"
 
 
-# Logging
+# logging functions
 
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $*"
 }
 
 log_success() {
-    echo -e "${GREEN}[✓]${NC} $*"
+    echo -e "${GREEN}[✓]${NC} $*"  # checkmark symbol
 }
 
 log_warn() {
     echo -e "${YELLOW}[!]${NC} $*"
 }
 
+# error output
 log_error() {
     echo -e "${RED}[✗]${NC} $*"
 }
@@ -48,7 +49,7 @@ log_question() {
 }
 
 
-# System Detection
+# system detection functions
 
 detect_distro() {
     if [[ -f /etc/os-release ]]; then
@@ -79,7 +80,7 @@ detect_cpu_info() {
     local cores=$(nproc --all 2>/dev/null || grep -c ^processor /proc/cpuinfo)
     local threads=$cores
 
-    # Detect physical cores
+    # get physical core count vs logical threads
     if [[ -f /proc/cpuinfo ]]; then
         local physical_cores=$(grep "^cpu cores" /proc/cpuinfo | head -1 | awk '{print $4}')
         if [[ -n "$physical_cores" ]]; then
@@ -94,14 +95,16 @@ detect_cpu_info() {
 detect_cpu_arch() {
     local cpu_model=$(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)
 
-    # Detect CPU architecture
+    # check for intel cpus first
     if echo "$cpu_model" | grep -qi "Intel"; then
+        # raptor lake = 13th/14th gen
         if echo "$cpu_model" | grep -qiE "Core.*(13|14)th"; then
             echo "RAPTORLAKE"
         elif echo "$cpu_model" | grep -qiE "Core.*(12)th"; then
             echo "ALDERLAKE"
         elif echo "$cpu_model" | grep -qiE "Core.*(11)th"; then
             echo "TIGERLAKE"
+        # comet lake
         elif echo "$cpu_model" | grep -qiE "Core.*(10)th"; then
             echo "COMETLAKE"
         elif echo "$cpu_model" | grep -qiE "Core.*(8|9)th"; then
@@ -112,6 +115,7 @@ detect_cpu_arch() {
             echo "BROADWELL"
         elif echo "$cpu_model" | grep -qiE "Core.*4th|Haswell"; then
             echo "HASWELL"
+        # xeon server cpus
         elif echo "$cpu_model" | grep -qiE "Xeon.*E5.*v4"; then
             echo "BROADWELL"
         elif echo "$cpu_model" | grep -qiE "Xeon.*E5.*v3"; then
@@ -120,6 +124,7 @@ detect_cpu_arch() {
             echo "GENERIC_CPU"
         fi
     elif echo "$cpu_model" | grep -qi "AMD"; then
+        # ryzen detection - zen4 is 7000 series
         if echo "$cpu_model" | grep -qiE "Ryzen.*(7|9).*[0-9]{4}"; then
             echo "ZEN4"
         elif echo "$cpu_model" | grep -qiE "Ryzen.*(5|7|9).*[5-6][0-9]{3}"; then
@@ -137,6 +142,7 @@ detect_cpu_arch() {
 }
 
 detect_gpu() {
+    # TODO: add support for multiple GPUs
     if lspci 2>/dev/null | grep -qi "VGA.*AMD\|VGA.*Radeon"; then
         echo "amd"
     elif lspci 2>/dev/null | grep -qi "VGA.*NVIDIA"; then
@@ -149,6 +155,7 @@ detect_gpu() {
 }
 
 detect_storage() {
+    # check nvme first since it's most common now
     if [[ -d /sys/block/nvme0n1 ]]; then
         echo "nvme"
     elif [[ -d /sys/block/sda ]]; then
@@ -164,25 +171,25 @@ detect_storage() {
 }
 
 
-# Kernel Version Detection
+# fetch latest kernel versions from kernel.org
 
 get_latest_kernel_version() {
     local latest_stable=""
     local latest_lts_612=""
     local latest_lts_66=""
 
-    # Fetch from kernel.org
+    # scrape kernel.org for version info
     local kernel_page=$(wget -qO- https://www.kernel.org/ 2>/dev/null || curl -s https://www.kernel.org/ 2>/dev/null)
 
     if [[ -n "$kernel_page" ]]; then
-        # Latest stable (mainline)
+        # parse mainline version
         latest_stable=$(echo "$kernel_page" | grep -oP 'mainline:.*?<strong>\K[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
 
         # LTS versions
         latest_lts_612=$(echo "$kernel_page" | grep -oP '6\.12.*?<strong>\K6\.12\.[0-9]+' | head -1)
         latest_lts_66=$(echo "$kernel_page" | grep -oP '6\.6.*?<strong>\K6\.6\.[0-9]+' | head -1)
 
-        # Fallback values
+        # fallback if parsing fails
         [[ -z "$latest_stable" ]] && latest_stable="7.0"
         [[ -z "$latest_lts_612" ]] && latest_lts_612="6.12.15"
         [[ -z "$latest_lts_66" ]] && latest_lts_66="6.6.68"
@@ -196,25 +203,25 @@ get_latest_kernel_version() {
 }
 
 
-# Interactive Configuration
+# interactive setup wizard
 
 interactive_setup() {
     log_info "Universal Linux Kernel Builder with CachyOS Patches"
     echo ""
 
-    # System info
+    # detect system info
     DISTRO=$(detect_distro)
     INIT_SYSTEM=$(detect_init_system)
     log_info "Detected distribution: $DISTRO (init: $INIT_SYSTEM)"
     echo ""
 
-    # Check latest versions
+    # fetch latest kernel versions
     log_info "Checking latest kernel versions on kernel.org..."
     local versions=$(get_latest_kernel_version)
     IFS='|' read -r latest_stable latest_lts_612 latest_lts_66 <<< "$versions"
     echo ""
 
-    # Version selection
+    # ask user which version to build
     log_question "Install $latest_stable (latest available)?"
     echo "  1) Yes"
     echo "  2) Choose another version"
@@ -259,7 +266,7 @@ interactive_setup() {
                 ;;
         esac
     else
-        # Use latest
+        # default to latest
         KERNEL_MAJOR=$(echo "$latest_stable" | cut -d. -f1)
         KERNEL_MINOR=$(echo "$latest_stable" | cut -d. -f2)
         KERNEL_PATCH=$(echo "$latest_stable" | cut -d. -f3)
@@ -273,7 +280,7 @@ interactive_setup() {
     log_success "Selected version: $KERNEL_VERSION"
     echo ""
 
-    # CPU config
+    # CPU detection and config
     read cores threads <<< $(detect_cpu_info)
     local detected_arch=$(detect_cpu_arch)
 
@@ -303,7 +310,7 @@ interactive_setup() {
     log_success "CPU: $CPU_ARCH ($CPU_THREADS threads)"
     echo ""
 
-    # GPU config
+    # GPU detection
     local detected_gpu=$(detect_gpu)
     log_question "Graphics card:"
     echo "  Detected: $detected_gpu"
@@ -323,7 +330,7 @@ interactive_setup() {
     log_success "GPU: $GPU_VENDOR"
     echo ""
 
-    # Storage config
+    # storage type selection
     local detected_storage=$(detect_storage)
     log_question "Storage type:"
     echo "  Detected: $detected_storage"
@@ -341,7 +348,7 @@ interactive_setup() {
     log_success "Storage: $STORAGE_TYPE"
     echo ""
 
-    # Confirm
+    # show final config before building
     log_info "Final Configuration"
     echo "  Kernel: Linux $KERNEL_VERSION"
     echo "  CPU: $CPU_ARCH ($CPU_THREADS threads)"
@@ -359,7 +366,7 @@ interactive_setup() {
 }
 
 
-# Dependencies
+# check for required build dependencies
 
 check_dependencies() {
     log_info "Checking dependencies..."
@@ -404,7 +411,7 @@ check_dependencies() {
 }
 
 
-# Download
+# download kernel source from kernel.org
 
 download_kernel() {
     log_info "Downloading Linux kernel $KERNEL_VERSION..."
@@ -439,13 +446,13 @@ download_cachyos_patches() {
 
     local base_url="https://raw.githubusercontent.com/CachyOS/kernel-patches/master/${KERNEL_MAJOR}.${KERNEL_MINOR}"
 
-    # CachyOS patches
+    # list of patches to download
     local patches=(
         "sched/0001-bore-cachy.patch"
         "misc/0001-cgroup-vram.patch"
     )
 
-    # 6.x compatibility
+    # base patches only work on 6.x kernels
     if [[ "${KERNEL_MAJOR}" -lt 7 ]]; then
         patches+=("all/0001-cachyos-base-all.patch")
     fi
@@ -454,6 +461,7 @@ download_cachyos_patches() {
         local patch_name=$(basename "$patch")
         if [[ ! -f "$patch_name" ]]; then
             local url="${base_url}/${patch}"
+            # check if patch exists before downloading
             if wget -q --spider "$url" 2>/dev/null; then
                 wget -c "$url" -O "$patch_name" || log_warn "Skipping $patch_name"
             else
@@ -478,6 +486,7 @@ apply_patches() {
             local patch_name=$(basename "$patch")
             log_info "Applying: $patch_name"
 
+            # dry run first to check if patch applies cleanly
             if patch -p1 --dry-run -N -i "$patch" &>/dev/null; then
                 patch -p1 -N -i "$patch"
                 log_success "$patch_name applied"
@@ -491,7 +500,7 @@ apply_patches() {
 }
 
 
-# Configuration
+# kernel configuration with optimizations
 
 configure_kernel() {
     log_info "Configuring kernel..."
@@ -499,7 +508,7 @@ configure_kernel() {
     local kernel_src="${BUILD_DIR}/linux-${KERNEL_VERSION}"
     cd "$kernel_src"
 
-    # Base config
+    # start with existing config if available
     if [[ -f /proc/config.gz ]]; then
         zcat /proc/config.gz > .config
     elif [[ -f "/boot/config-$(uname -r)" ]]; then
@@ -508,11 +517,11 @@ configure_kernel() {
         make LLVM=1 defconfig
     fi
 
-    # CPU
+    # CPU architecture optimization
     ./scripts/config --enable CONFIG_M${CPU_ARCH}
     ./scripts/config --set-val CONFIG_NR_CPUS $((CPU_THREADS > 512 ? 512 : CPU_THREADS))
 
-    # Scheduler
+    # BORE scheduler config
     ./scripts/config --enable CONFIG_SCHED_BORE || true
     ./scripts/config --enable CONFIG_PREEMPT
     ./scripts/config --disable CONFIG_PREEMPT_VOLUNTARY
@@ -520,7 +529,7 @@ configure_kernel() {
     ./scripts/config --set-val CONFIG_HZ 1000
     ./scripts/config --enable CONFIG_HZ_1000
 
-    # GPU config drivers
+    # configure GPU drivers based on hardware
     case "$GPU_VENDOR" in
         amd)
             ./scripts/config --enable CONFIG_DRM_AMDGPU
@@ -538,7 +547,7 @@ configure_kernel() {
             ;;
     esac
 
-    # Storage config
+    # I/O scheduler based on storage type
     case "$STORAGE_TYPE" in
         nvme)
             ./scripts/config --enable CONFIG_BLK_DEV_NVME
@@ -554,7 +563,7 @@ configure_kernel() {
             ;;
     esac
 
-    # Memory
+    # memory management optimizations
     ./scripts/config --enable CONFIG_TRANSPARENT_HUGEPAGE_MADVISE
     ./scripts/config --enable CONFIG_LRU_GEN
     ./scripts/config --enable CONFIG_LRU_GEN_ENABLED
@@ -562,40 +571,40 @@ configure_kernel() {
     ./scripts/config --enable CONFIG_ZRAM
     ./scripts/config --set-str CONFIG_ZSWAP_COMPRESSOR_DEFAULT "zstd"
 
-    # Network
+    # networking - BBR congestion control
     ./scripts/config --enable CONFIG_TCP_CONG_BBR
     ./scripts/config --set-str CONFIG_DEFAULT_TCP_CONG "bbr"
 
-    # Compiler
+    # compiler optimizations - clang + ThinLTO
     ./scripts/config --enable CONFIG_LTO_CLANG_THIN
     ./scripts/config --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE
 
-    # Gaming
+    # gaming optimizations for wine/proton
     ./scripts/config --enable CONFIG_FUTEX
     ./scripts/config --enable CONFIG_FUTEX2
     ./scripts/config --enable CONFIG_NTSYNC || true
 
-    # Containers
+    # container support (docker/podman)
     ./scripts/config --enable CONFIG_NAMESPACES
     ./scripts/config --enable CONFIG_CGROUPS
     ./scripts/config --enable CONFIG_MEMCG
 
-    # Debug
+    # disable debug symbols to reduce size
     ./scripts/config --disable CONFIG_DEBUG_INFO
     ./scripts/config --disable CONFIG_DEBUG_INFO_BTF
 
-    # Name
+    # set kernel name suffix
     ./scripts/config --set-str CONFIG_LOCALVERSION "-bore"
     ./scripts/config --disable CONFIG_LOCALVERSION_AUTO
 
-    # Finalize
+    # apply config changes
     make LLVM=1 olddefconfig
 
     log_success "Configuration complete"
 }
 
 
-# Build
+# compile kernel with clang
 
 compile_kernel() {
     log_info "Compiling kernel (this will take 20-90 minutes)..."
@@ -612,7 +621,7 @@ compile_kernel() {
 }
 
 
-# Install
+# install compiled kernel to /boot
 
 install_kernel() {
     log_info "Installing kernel..."
@@ -622,7 +631,7 @@ install_kernel() {
         exit 1
     fi
 
-    # Auto-detect version
+    # try to detect kernel version from build dir
     if [[ -z "$KERNEL_VERSION" ]]; then
         local kernel_dir=$(ls -d "${BUILD_DIR}"/linux-* 2>/dev/null | head -1)
         if [[ -z "$kernel_dir" ]]; then
@@ -633,7 +642,7 @@ install_kernel() {
         log_info "Detected kernel version: $KERNEL_VERSION"
     fi
 
-    # Detect distro
+    # detect distro if not set
     if [[ -z "$DISTRO" ]]; then
         DISTRO=$(detect_distro)
     fi
@@ -641,11 +650,11 @@ install_kernel() {
     local kernel_src="${BUILD_DIR}/linux-${KERNEL_VERSION}"
     cd "$kernel_src"
 
-    # Install modules
+    # install kernel modules first
     log_info "Installing modules..."
     make LLVM=1 modules_install
 
-    # Detect module directory
+    # find the actual module directory (might have extra suffix)
     local module_dir=$(ls -d /lib/modules/${KERNEL_VERSION}* 2>/dev/null | sort -V | tail -1)
     if [[ -z "$module_dir" ]]; then
         log_error "Module directory not found after installation"
@@ -654,13 +663,13 @@ install_kernel() {
     local kernel_release=$(basename "$module_dir")
     log_info "Module directory: $kernel_release"
 
-    # Install kernel files
+    # copy kernel image and related files to /boot
     log_info "Installing kernel..."
     cp -v arch/x86/boot/bzImage "/boot/vmlinuz-${kernel_release}"
     cp -v System.map "/boot/System.map-${kernel_release}"
     cp -v .config "/boot/config-${kernel_release}"
 
-    # Generate initramfs
+    # generate initramfs (distro-specific)
     log_info "Generating initramfs..."
     case "$DISTRO" in
         void|arch|manjaro)
@@ -684,7 +693,7 @@ install_kernel() {
 }
 
 
-# Cleanup
+# cleanup build directory
 
 clean_build() {
     log_info "Cleaning build directory..."
@@ -693,7 +702,7 @@ clean_build() {
 }
 
 
-# Main
+# main entry point
 
 main() {
     case "${1:-}" in
