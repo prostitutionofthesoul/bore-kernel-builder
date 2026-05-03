@@ -178,8 +178,8 @@ get_latest_kernel_version() {
     local latest_lts_66=""
 
     local releases_json
-    releases_json=$(wget -qO- https://www.kernel.org/releases.json 2>/dev/null \
-        || curl -s https://www.kernel.org/releases.json 2>/dev/null)
+    releases_json=$(wget -qO- --timeout=10 https://www.kernel.org/releases.json 2>/dev/null \
+        || curl -s --max-time 10 https://www.kernel.org/releases.json 2>/dev/null)
 
     if [[ -n "$releases_json" ]]; then
         # prefer stable over mainline to avoid rc versions
