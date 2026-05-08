@@ -182,22 +182,25 @@ get_latest_kernel_version() {
         || curl -s --max-time 10 https://www.kernel.org/releases.json 2>/dev/null)
 
     if [[ -n "$releases_json" ]]; then
+        local json_flat
+        json_flat=$(echo "$releases_json" | tr -d '\n')
+
         # prefer stable over mainline to avoid rc versions
-        latest_stable=$(echo "$releases_json" \
+        latest_stable=$(echo "$json_flat" \
             | grep -oP '"moniker"\s*:\s*"stable".*?"version"\s*:\s*"\K[^"]+' \
             | head -1)
         # fall back to mainline if no stable found yet (e.g. right after major release)
         if [[ -z "$latest_stable" ]]; then
-            latest_stable=$(echo "$releases_json" \
+            latest_stable=$(echo "$json_flat" \
                 | grep -oP '"moniker"\s*:\s*"mainline".*?"version"\s*:\s*"\K[^"]+' \
                 | head -1)
         fi
 
-        latest_lts_612=$(echo "$releases_json" \
+        latest_lts_612=$(echo "$json_flat" \
             | grep -oP '"version"\s*:\s*"\K6\.12\.[0-9]+' \
             | head -1)
 
-        latest_lts_66=$(echo "$releases_json" \
+        latest_lts_66=$(echo "$json_flat" \
             | grep -oP '"version"\s*:\s*"\K6\.6\.[0-9]+' \
             | head -1)
     fi
