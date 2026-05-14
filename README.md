@@ -2,6 +2,8 @@
 
 Universal Linux kernel builder with [CachyOS](https://github.com/CachyOS/kernel-patches) patches and BORE (Burst-Oriented Response Enhancer) scheduler.
 
+> **Codeberg Mirror:** [codeberg.org/metanoia/bore-kernel-builder](https://codeberg.org/metanoia/bore-kernel-builder)
+
 ## Features
 
 - **Automatic hardware detection** - CPU architecture, GPU vendor, storage type
