@@ -1,8 +1,18 @@
+> # 🚨 PROJECT MOVED
+>
+> ## THIS REPOSITORY IS NO LONGER MAINTAINED
+>
+> ### I AM LEAVING GITHUB. NEW HOME:
+>
+> # 👉 [codeberg.org/metanoia/bore-kernel-builder](https://codeberg.org/metanoia/bore-kernel-builder)
+>
+> **ALL UPDATES ARE ON CODEBERG ONLY. THIS REPO IS FROZEN.**
+
+---
+
 # BORE Kernel Builder
 
 Universal Linux kernel builder with [CachyOS](https://github.com/CachyOS/kernel-patches) patches and BORE (Burst-Oriented Response Enhancer) scheduler.
-
-> **Codeberg Mirror:** [codeberg.org/metanoia/bore-kernel-builder](https://codeberg.org/metanoia/bore-kernel-builder)
 
 ## Features
 
